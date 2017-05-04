@@ -151,8 +151,14 @@ func (n NetStat) findPid(inode string) string {
 	for _, item := range d {
 		path, _ := os.Readlink(item)
 		out := re.FindString(path)
+
 		if len(out) != 0 {
-			pid = strings.Split(item, "/")[2]
+			start := len(n.procRoot)
+			if !strings.HasSuffix(n.procRoot, "/") {
+				start++
+			}
+			index := strings.Index(item[start:], "/")
+			pid = item[start : start+index]
 		}
 	}
 	return pid
@@ -175,7 +181,11 @@ func getProcessName(exe string) string {
 }
 
 func getUser(uid string) string {
-	u, _ := user.LookupId(uid)
+	u, err := user.LookupId(uid)
+	if err != nil {
+		return ""
+	}
+
 	return u.Username
 }
 
@@ -199,7 +209,6 @@ func (n NetStat) netstat(t string) []Process {
 	data := n.getData(t)
 
 	for _, line := range data {
-
 		// local ip and port
 		lineArray := removeEmpty(strings.Split(strings.TrimSpace(line), " "))
 		ipPort := strings.Split(lineArray[1], ":")
