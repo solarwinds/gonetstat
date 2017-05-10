@@ -15,7 +15,6 @@ import (
 	"os/user"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -79,7 +78,7 @@ func (n NetStat) getData(t string) []string {
 	lines := strings.Split(string(data), "\n")
 
 	// Return lines without Header line and blank line on the end
-	return lines[1 : len(lines)-1]
+	return lines[1:]
 
 }
 
@@ -135,30 +134,25 @@ func convertIp(ip string) string {
 	return out
 }
 
-func (n NetStat) findPid(inode string) string {
-	// Loop through all fd dirs of process on /proc to compare the inode and
-	// get the pid.
+func (n NetStat) findPid(paths []string, inode string) string {
 
 	pid := "-"
 
-	d, err := filepath.Glob(n.getProcPath("[0-9]*/fd/[0-9]*"))
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	re := regexp.MustCompile(inode)
-	for _, item := range d {
+	//re := regexp.MustCompile(inode)
+	searchFor := "[" + inode + "]"
+	for _, item := range paths {
 		path, _ := os.Readlink(item)
-		out := re.FindString(path)
+		//out := re.FindString(path)
+		out := strings.Index(path, searchFor)
 
-		if len(out) != 0 {
+		if out != -1 {
 			start := len(n.procRoot)
 			if !strings.HasSuffix(n.procRoot, "/") {
 				start++
 			}
 			index := strings.Index(item[start:], "/")
 			pid = item[start : start+index]
+			break
 		}
 	}
 	return pid
@@ -200,17 +194,29 @@ func removeEmpty(array []string) []string {
 	return result
 }
 
-func (n NetStat) netstat(t string) []Process {
+func (n NetStat) netstat(t string) []*Process {
 	// Return a array of Process with Name, Ip, Port, State .. etc
 	// Require Root acess to get information about some processes.
 
-	var Processes []Process
+	var Processes []*Process
 
 	data := n.getData(t)
 
+	d, err := filepath.Glob(n.getProcPath("[0-9]*/fd/[0-9]*"))
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	for _, line := range data {
-		// local ip and port
+
 		lineArray := removeEmpty(strings.Split(strings.TrimSpace(line), " "))
+
+		if len(lineArray) == 0 {
+			continue
+		}
+
+		// local ip and port
 		ipPort := strings.Split(lineArray[1], ":")
 		ip := convertIp(ipPort[0])
 		port := hexToDec(ipPort[1])
@@ -221,12 +227,13 @@ func (n NetStat) netstat(t string) []Process {
 		fport := hexToDec(fipPort[1])
 
 		state := STATE[lineArray[3]]
-		uid := getUser(lineArray[7])
-		pid := n.findPid(lineArray[9])
+		//uid := getUser(lineArray[7])
+		uid := ""
+		pid := n.findPid(d, lineArray[9])
 		exe := n.getProcessExe(pid)
 		name := getProcessName(exe)
 
-		p := Process{uid, name, pid, exe, state, ip, port, fip, fport}
+		p := &Process{uid, name, pid, exe, state, ip, port, fip, fport}
 
 		Processes = append(Processes, p)
 
@@ -253,25 +260,25 @@ func NewNetStat(procPath string) NetStat {
 	return netstat
 }
 
-func (n NetStat) Tcp() []Process {
+func (n NetStat) Tcp() []*Process {
 	// Get a slice of Process type with TCP data
 	data := n.netstat("tcp")
 	return data
 }
 
-func (n NetStat) Udp() []Process {
+func (n NetStat) Udp() []*Process {
 	// Get a slice of Process type with UDP data
 	data := n.netstat("udp")
 	return data
 }
 
-func (n NetStat) Tcp6() []Process {
+func (n NetStat) Tcp6() []*Process {
 	// Get a slice of Process type with TCP6 data
 	data := n.netstat("tcp6")
 	return data
 }
 
-func (n NetStat) Udp6() []Process {
+func (n NetStat) Udp6() []*Process {
 	// Get a slice of Process type with UDP6 data
 	data := n.netstat("udp6")
 	return data
