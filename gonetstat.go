@@ -6,7 +6,7 @@
    Author: Rafael Santos <rafael@sourcecode.net.br>
 */
 
-package GOnetstat
+package gonetstat
 
 import (
 	"fmt"
